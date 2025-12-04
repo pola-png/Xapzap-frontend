@@ -88,7 +88,11 @@ Future<void> _bootstrapServices() async {
   }
   // Start preloading the home feeds in the background so that
   // the HomeScreen can render instantly when opened.
-  FeedPrefetcher.preloadHomeFeeds();
+  // On web we skip this to reduce first-load work and rely on
+  // HomeScreen to fetch lazily when it mounts.
+  if (!kIsWeb) {
+    FeedPrefetcher.preloadHomeFeeds();
+  }
 }
 
 class XapZapApp extends StatelessWidget {

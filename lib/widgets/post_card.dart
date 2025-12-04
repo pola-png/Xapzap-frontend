@@ -769,7 +769,7 @@ class _PostCardState extends State<PostCard> {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
       child: AspectRatio(
-        aspectRatio: 1 / 0.55, // shorter rectangle than before
+        aspectRatio: 1 / 0.50, // shorter rectangle than before
         child: Container(
           width: double.infinity,
           decoration: BoxDecoration(
@@ -924,16 +924,32 @@ class _PostCardState extends State<PostCard> {
 
   double _pickAspectRatio(String kindLower, bool isVideoPost) {
     if (isVideoPost && kindLower.contains('reel')) {
-      return 9 / 11; // slightly shorter portrait reels in feed
+      return 9 / 8; // slightly shorter portrait reels in feed
     }
     if (isVideoPost) {
-      return 16 / 9; // standard landscape video look
+      return 16 / 7; // standard landscape video look
     }
     return 4 /
         5; // photo/news default: taller than square so reactions stay visible
   }
 
   Widget _signedImage(String url) {
+    // On web, Bunny CDN is currently not CORS-enabled / available,
+    // and attempting to load those URLs causes slow failures and
+    // console noise. Fall back to a lightweight placeholder instead.
+    if (kIsWeb && url.contains('b-cdn.net')) {
+      return Container(
+        color: const Color(0xFFF3F4F6),
+        child: const Center(
+          child: Icon(
+            LucideIcons.imageOff,
+            size: 40,
+            color: Color(0xFF9CA3AF),
+          ),
+        ),
+      );
+    }
+
     return FutureBuilder<String?>(
       future: _resolveSigned(url),
       builder: (context, snap) {
