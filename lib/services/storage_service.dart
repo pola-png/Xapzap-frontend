@@ -1,9 +1,12 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:path/path.dart' as p;
+
+import 'bunny_upload_function.dart';
 
 /// Storage helper backed by Bunny.net.
 ///
@@ -94,6 +97,22 @@ class WasabiService {
       final ext = p.extension(file.path);
       final key =
           'posts/$userId/media_${DateTime.now().millisecondsSinceEpoch}$ext';
+
+      // On web, delegate to the Appwrite Function so Bunny secrets stay server-side.
+      if (kIsWeb) {
+        try {
+          final bytes = await file.readAsBytes();
+          final url = await BunnyUploadFunction.uploadBytes(bytes, key);
+          if (url != null) {
+            urls.add(url);
+            continue;
+          }
+        } catch (_) {
+          // fall through to try direct upload (if ever configured)
+        }
+      }
+
+      // Native/mobile path uses direct Bunny upload with local .env config.
       final storedPath = await _uploadFile(File(file.path), key);
       urls.add(storedPath);
     }
@@ -113,10 +132,20 @@ class WasabiService {
   }
 
   static Future<String?> uploadProfileImage(XFile file, String userId) async {
+    final ext = p.extension(file.path);
+    final key =
+        'profiles/$userId/avatar_${DateTime.now().millisecondsSinceEpoch}$ext';
+
+    if (kIsWeb) {
+      try {
+        final bytes = await file.readAsBytes();
+        return await BunnyUploadFunction.uploadBytes(bytes, key);
+      } catch (_) {
+        return null;
+      }
+    }
+
     try {
-      final ext = p.extension(file.path);
-      final key =
-          'profiles/$userId/avatar_${DateTime.now().millisecondsSinceEpoch}$ext';
       final storedPath = await _uploadFile(File(file.path), key);
       return storedPath;
     } catch (_) {
@@ -125,10 +154,20 @@ class WasabiService {
   }
 
   static Future<String?> uploadProfileCover(XFile file, String userId) async {
+    final ext = p.extension(file.path);
+    final key =
+        'profiles/$userId/cover_${DateTime.now().millisecondsSinceEpoch}$ext';
+
+    if (kIsWeb) {
+      try {
+        final bytes = await file.readAsBytes();
+        return await BunnyUploadFunction.uploadBytes(bytes, key);
+      } catch (_) {
+        return null;
+      }
+    }
+
     try {
-      final ext = p.extension(file.path);
-      final key =
-          'profiles/$userId/cover_${DateTime.now().millisecondsSinceEpoch}$ext';
       final storedPath = await _uploadFile(File(file.path), key);
       return storedPath;
     } catch (_) {
