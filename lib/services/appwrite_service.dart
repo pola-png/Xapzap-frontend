@@ -33,6 +33,7 @@ class AppwriteService {
   static const String statusesCollectionId = 'statuses';
   static const String notificationsCollectionId = 'notifications';
   static const String postBoostsCollectionId = 'post_boosts';
+  static const String newsCollectionId = 'news';
   static const String adRevenueCollectionId = 'ad_revenue_events';
 
   // Buckets
@@ -457,6 +458,30 @@ class AppwriteService {
         if (cursorId != null) Query.cursorAfter(cursorId),
       ],
     );
+  }
+
+  static Future<void> updatePostSeo(
+    String postId, {
+    String? seoTitle,
+    String? seoDescription,
+    String? seoSlug,
+    List<String>? seoKeywords,
+  }) async {
+    final data = <String, dynamic>{};
+    if (seoTitle != null && seoTitle.isNotEmpty) {
+      data['seoTitle'] = seoTitle;
+    }
+    if (seoDescription != null && seoDescription.isNotEmpty) {
+      data['seoDescription'] = seoDescription;
+    }
+    if (seoSlug != null && seoSlug.isNotEmpty) {
+      data['seoSlug'] = seoSlug;
+    }
+    if (seoKeywords != null && seoKeywords.isNotEmpty) {
+      data['seoKeywords'] = seoKeywords;
+    }
+    if (data.isEmpty) return;
+    await updateRow(postsCollectionId, postId, data);
   }
 
   static Future<models.RowList> searchPostsByText(
@@ -1291,6 +1316,32 @@ class AppwriteService {
         Query.equal('chatId', chatId),
         Query.orderDesc('timestamp'),
         Query.limit(limit),
+      ],
+    );
+  }
+
+  // News (separate table for human- and AI-authored articles)
+  static Future<models.Row> createNewsArticle(Map<String, dynamic> data) async {
+    final rowId = ID.unique();
+    return _tables.createRow(
+      databaseId: databaseId,
+      tableId: newsCollectionId,
+      rowId: rowId,
+      data: <String, dynamic>{...data, 'newsId': data['newsId'] ?? rowId},
+    );
+  }
+
+  static Future<models.RowList> fetchNewsArticles({
+    int limit = 20,
+    String? cursorId,
+  }) async {
+    return _tables.listRows(
+      databaseId: databaseId,
+      tableId: newsCollectionId,
+      queries: <String>[
+        Query.orderDesc('createdAt'),
+        Query.limit(limit),
+        if (cursorId != null) Query.cursorAfter(cursorId),
       ],
     );
   }

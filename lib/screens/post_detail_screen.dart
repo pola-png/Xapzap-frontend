@@ -8,6 +8,7 @@ import '../services/storage_service.dart';
 import '../widgets/post_card.dart';
 import '../widgets/voice_recorder.dart';
 import '../widgets/voice_note_player.dart';
+import '../utils/news_seo.dart';
 
 class PostDetailScreen extends StatefulWidget {
   final Post post;
@@ -41,12 +42,14 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
   String? _replyToCommentId;
   bool _isVoiceMode = false;
   String? _currentUserAvatarUrl;
+  NewsSeo? _newsSeo;
 
   @override
   void initState() {
     super.initState();
     _loadComments();
     _getCurrentUser();
+    _maybeInitNewsSeo();
   }
 
   Future<void> _getCurrentUser() async {
@@ -98,6 +101,22 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     }
   }
 
+  void _maybeInitNewsSeo() {
+    final kind = widget.post.kind?.toLowerCase() ?? '';
+    final isNews = kind.contains('news') || kind.contains('blog');
+    if (!isNews) return;
+    final seo = buildNewsSeo(widget.post.title ?? '', widget.post.content);
+    setState(() => _newsSeo = seo);
+    // Best-effort: persist SEO fields back to Appwrite for future use.
+    AppwriteService.updatePostSeo(
+      widget.post.id,
+      seoTitle: seo.seoTitle,
+      seoDescription: seo.seoDescription,
+      seoSlug: seo.seoSlug,
+      seoKeywords: seo.seoKeywords,
+    );
+  }
+
   @override
   void dispose() {
     _commentController.dispose();
@@ -125,7 +144,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
             child: ListView.builder(
               controller: _scrollController,
               padding: EdgeInsets.zero,
-              itemCount: 1 + (_loadingComments ? 1 : _rootComments.length),
+              itemCount: 1 + (_newsSeo != null ? 1 : 0) + (_loadingComments ? 1 : _rootComments.length),
               itemBuilder: (context, index) {
                 if (index == 0) {
                   return Container(
@@ -151,6 +170,59 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                     ),
                   );
                 }
+                if (index == 1 && _newsSeo != null) {
+                  final seo = _newsSeo!;
+                  return Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    margin: const EdgeInsets.only(bottom: 8),
+                    color: theme.colorScheme.surface,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'SEO summary',
+                          style: theme.textTheme.labelLarge?.copyWith(
+                            fontWeight: FontWeight.w700,
+                            color: theme.colorScheme.primary,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          seo.seoTitle,
+                          style: theme.textTheme.titleMedium,
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          seo.seoDescription,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                        if (seo.seoKeywords.isNotEmpty) ...[
+                          const SizedBox(height: 8),
+                          Wrap(
+                            spacing: 6,
+                            runSpacing: 4,
+                            children: seo.seoKeywords
+                                .map(
+                                  (k) => Chip(
+                                    label: Text(k),
+                                    materialTapTargetSize:
+                                        MaterialTapTargetSize.shrinkWrap,
+                                    visualDensity:
+                                        VisualDensity.compact,
+                                  ),
+                                )
+                                .toList(),
+                          ),
+                        ],
+                      ],
+                    ),
+                  );
+                }
+                final offset = 1 + (_newsSeo != null ? 1 : 0);
+                final commentIndex = index - offset;
                 if (_loadingComments) {
                   return const Padding(
                     padding: EdgeInsets.all(16),

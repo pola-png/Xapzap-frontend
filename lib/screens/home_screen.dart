@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:appwrite/models.dart' as aw;
 import 'package:appwrite/appwrite.dart' show RealtimeSubscription;
 import '../models/post.dart';
+import '../models/news_article.dart';
 import '../services/appwrite_service.dart';
 import '../services/storage_service.dart';
 import '../services/feed_cache.dart';
@@ -43,6 +44,7 @@ class _HomeScreenState extends State<HomeScreen>
   final List<Post> _followingPosts = FeedCache.followingPosts;
   final Map<String, List<String>> _mediaByPostId = FeedCache.mediaByPostId;
   final Map<String, String> _authorByPostId = FeedCache.authorByPostId;
+  final List<NewsArticle> _newsArticles = [];
   final List<Story> _stories = [];
   final List<StatusUpdate> _statusUpdates = [];
   final ScrollController _forYouController = ScrollController();
@@ -53,10 +55,13 @@ class _HomeScreenState extends State<HomeScreen>
   bool _monetizedAccepted = false;
   late TabController _tabController;
   bool _isLoading = false;
+  bool _isLoadingNews = false;
+  bool _hasMoreNews = true;
   bool _isGuest = true;
   String? _currentUserId;
   String? _forYouCursor = FeedCache.forYouCursor;
   String? _followingCursor = FeedCache.followingCursor;
+  String? _newsCursor;
   List<String> _followingIds = [];
   late final VoidCallback _storiesListener;
   final ImagePicker _storyPicker = ImagePicker();
@@ -76,7 +81,7 @@ class _HomeScreenState extends State<HomeScreen>
       () => _onScroll(_followingController, false),
     );
     _watchController.addListener(() => _onScroll(_watchController, true));
-    _newsController.addListener(() => _onScroll(_newsController, true));
+    _newsController.addListener(_onNewsScroll);
 
     // Only fetch from network if we don't already have cached feeds.
     if (!FeedCache.hasForYou) {
@@ -85,6 +90,7 @@ class _HomeScreenState extends State<HomeScreen>
     if (!FeedCache.hasFollowing) {
       _refreshFeed(false);
     }
+    _loadInitialNews();
     _subscribePostsRealtime();
   }
 
@@ -216,18 +222,20 @@ class _HomeScreenState extends State<HomeScreen>
     Color onSurface,
     Color onSurfaceVariant,
   ) {
-    return Scaffold(
-      body: RefreshIndicator(
-        onRefresh: () async {
-          final index = _tabController.index;
-          // For For You, Watch, Reels, News: refresh For You feed.
-          if (index == 0 || index == 1 || index == 2 || index == 4) {
-            await _refreshFeed(true);
-          } else if (index == 5) {
-            // Following tab
-            await _refreshFeed(false);
-          }
-        },
+      return Scaffold(
+        body: RefreshIndicator(
+          onRefresh: () async {
+            final index = _tabController.index;
+            // For For You, Watch, Reels: refresh For You feed.
+            if (index == 0 || index == 1 || index == 2) {
+              await _refreshFeed(true);
+            } else if (index == 4) {
+              await _refreshNews();
+            } else if (index == 5) {
+              // Following tab
+              await _refreshFeed(false);
+            }
+          },
         child: NestedScrollView(
           physics: const BouncingScrollPhysics(
             parent: AlwaysScrollableScrollPhysics(),
@@ -291,12 +299,15 @@ class _HomeScreenState extends State<HomeScreen>
     Color onSurfaceVariant,
   ) {
     final bool isWatchTab = _tabController.index == 1;
+    final bool isReelsTab = _tabController.index == 2;
+    final bool isLiveTab = _tabController.index == 3;
+    final bool isCompactNav = isWatchTab || isReelsTab || isLiveTab;
     return Scaffold(
       // Header is rendered by MainScreen on desktop.
       body: Row(
         children: [
           SizedBox(
-            width: isWatchTab ? 72 : 260,
+            width: isCompactNav ? 72 : 260,
             child: ListView(
               padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 0),
               children: [
@@ -305,37 +316,37 @@ class _HomeScreenState extends State<HomeScreen>
                   Icons.home_filled,
                   'For You',
                   0,
-                  compact: isWatchTab,
+                  compact: isCompactNav,
                 ),
                 _buildSideNavItem(
                   Icons.ondemand_video_outlined,
                   'Watch',
                   1,
-                  compact: isWatchTab,
+                  compact: isCompactNav,
                 ),
                 _buildSideNavItem(
                   Icons.video_library_outlined,
                   'Reels',
                   2,
-                  compact: isWatchTab,
+                  compact: isCompactNav,
                 ),
                 _buildSideNavItem(
                   Icons.wifi_tethering,
                   'Live',
                   3,
-                  compact: isWatchTab,
+                  compact: isCompactNav,
                 ),
                 _buildSideNavItem(
                   Icons.article_outlined,
                   'News',
                   4,
-                  compact: isWatchTab,
+                  compact: isCompactNav,
                 ),
                 _buildSideNavItem(
                   Icons.groups_outlined,
                   'Following',
                   5,
-                  compact: isWatchTab,
+                  compact: isCompactNav,
                 ),
               ],
             ),
@@ -592,64 +603,437 @@ class _HomeScreenState extends State<HomeScreen>
     return result;
   }
 
-  List<Post> _buildTrendingFeed(List<Post> sortedPosts) {
+    List<Post> _buildTrendingFeed(List<Post> sortedPosts) {
     final posts = List<Post>.from(sortedPosts);
     posts.sort((a, b) => b.totalEngagement.compareTo(a.totalEngagement));
     return posts;
   }
 
-  Widget _buildReelsTab() {
-    final reelsPosts = _forYouPosts
-        .where((p) => _isVideoPost(p) && _isReelPost(p))
-        .toList();
-    return _buildReelsFeed(reelsPosts);
-  }
+    Widget _buildReelsTab() {
+      final reelsPosts = _forYouPosts
+          .where((p) => _isVideoPost(p) && _isReelPost(p))
+          .toList();
+      return _buildReelsFeed(reelsPosts);
+    }
 
-  Widget _buildNewsTab() {
-    final newsPosts = _forYouPosts.where(_isNewsPost).toList();
-
-    return RefreshIndicator(
-      onRefresh: () => _refreshFeed(true),
-      child: ListView.builder(
-        controller: _newsController,
-        physics: const BouncingScrollPhysics(
-          parent: AlwaysScrollableScrollPhysics(),
+    Widget _buildNewsTab() {
+      return RefreshIndicator(
+        onRefresh: _refreshNews,
+        child: ListView.builder(
+          controller: _newsController,
+          physics: const BouncingScrollPhysics(
+            parent: AlwaysScrollableScrollPhysics(),
+          ),
+          padding: EdgeInsets.zero,
+          itemCount: _newsArticles.isEmpty && !_isLoadingNews
+              ? 1
+              : _newsArticles.length + (_isLoadingNews ? 1 : 0),
+          itemBuilder: (context, index) {
+            if (_newsArticles.isEmpty && !_isLoadingNews) {
+              return const SizedBox(
+                height: 200,
+                child: Center(child: Text('No news articles yet. Pull to refresh')),
+              );
+            }
+            if (index >= _newsArticles.length) {
+              return _isLoadingNews
+                  ? const Padding(
+                      padding: EdgeInsets.all(16),
+                      child: Center(
+                        child: CircularProgressIndicator(
+                          color: Color(0xFF1DA1F2),
+                        ),
+                      ),
+                    )
+                  : const SizedBox.shrink();
+            }
+            final article = _newsArticles[index];
+            return _buildNewsCard(article);
+          },
         ),
-        padding: EdgeInsets.zero,
-        itemCount: newsPosts.isEmpty && !_isLoading
-            ? 1
-            : newsPosts.length + (_isLoading ? 1 : 0),
-        itemBuilder: (context, index) {
-          if (newsPosts.isEmpty && !_isLoading) {
-            return const SizedBox(
-              height: 200,
-              child: Center(child: Text('No news posts yet. Pull to refresh')),
-            );
+      );
+    }
+
+    bool _isNewsPost(Post post) {
+      final kind = post.kind?.toLowerCase();
+      if (kind == null) return false;
+      return kind.contains('news') || kind.contains('blog');
+    }
+
+    Future<void> _loadInitialNews() async {
+      _newsArticles.clear();
+      _newsCursor = null;
+      _hasMoreNews = true;
+      await _loadMoreNews();
+    }
+
+    Future<void> _refreshNews() async {
+      _newsArticles.clear();
+      _newsCursor = null;
+      _hasMoreNews = true;
+      await _loadMoreNews();
+    }
+
+    void _onNewsScroll() {
+      if (!_hasMoreNews || _isLoadingNews) return;
+      if (!_newsController.hasClients) return;
+      final position = _newsController.position;
+      if (position.pixels >= position.maxScrollExtent - 600) {
+        _loadMoreNews();
+      }
+    }
+
+    Future<void> _loadMoreNews() async {
+      if (_isLoadingNews || !_hasMoreNews) return;
+      setState(() => _isLoadingNews = true);
+      try {
+        final aw.RowList list = await AppwriteService.fetchNewsArticles(
+          limit: 20,
+          cursorId: _newsCursor,
+        );
+        final rows = list.rows;
+        if (rows.isEmpty) {
+          _hasMoreNews = false;
+          return;
+        }
+        for (final row in rows) {
+          final data = row.data;
+          final List<String> tags = data['tags'] is List
+              ? (data['tags'] as List).map((e) => e.toString()).toList()
+              : <String>[];
+          final List<String> imageUrls = data['imageUrls'] is List
+              ? (data['imageUrls'] as List).map((e) => e.toString()).toList()
+              : <String>[];
+          String? thumbnail;
+          final rawThumb1 = data['thumbnailUrl'];
+          if (rawThumb1 is String && rawThumb1.isNotEmpty) {
+            thumbnail = rawThumb1;
+          } else {
+            final rawThumb2 = data['thumbnailUr'];
+            if (rawThumb2 is String && rawThumb2.isNotEmpty) {
+              thumbnail = rawThumb2;
+            }
           }
-          if (index >= newsPosts.length) {
-            return _isLoading
-                ? const Padding(
-                    padding: EdgeInsets.all(16),
-                    child: Center(
-                      child: CircularProgressIndicator(
-                        color: Color(0xFF1DA1F2),
+          final createdAt = DateTime.tryParse(row.$createdAt) ??
+              (data['publishedAt'] is String
+                  ? DateTime.tryParse(data['publishedAt'] as String)
+                  : null) ??
+              DateTime.now();
+          _newsArticles.add(
+            NewsArticle(
+              id: row.$id,
+              title: data['title'] as String? ?? '',
+              subtitle: data['subtitle'] as String?,
+              content: data['content'] as String? ?? '',
+              summary: data['summary'] as String?,
+              category: data['category'] as String?,
+              tags: tags,
+              topic: data['topic'] as String?,
+              thumbnailUrl: thumbnail,
+              imageUrls: imageUrls,
+              language: data['language'] as String? ?? 'en',
+              sourceType: data['sourceType'] as String? ?? 'user',
+              aiGenerated: data['aiGenerated'] as bool? ?? false,
+              createdAt: createdAt,
+            ),
+          );
+        }
+        _newsCursor = rows.last.$id;
+      } catch (_) {
+        // Ignore errors for now; UI will just stop loading more.
+      } finally {
+        if (mounted) {
+          setState(() => _isLoadingNews = false);
+        }
+      }
+    }
+
+    String _formatNewsTimestamp(DateTime dt) {
+      final local = dt.toLocal();
+      final now = DateTime.now();
+      final difference = now.difference(local);
+      if (difference.inMinutes < 60) {
+        final m = difference.inMinutes.clamp(1, 59);
+        return '${m}m ago';
+      }
+      if (difference.inHours < 24) {
+        final h = difference.inHours;
+        return '${h}h ago';
+      }
+      if (difference.inDays < 7) {
+        final d = difference.inDays;
+        return '${d}d ago';
+      }
+      return '${local.year}/${local.month.toString().padLeft(2, '0')}/${local.day.toString().padLeft(2, '0')}';
+    }
+
+    Widget _buildNewsCard(NewsArticle article) {
+      final theme = Theme.of(context);
+      final textTheme = theme.textTheme;
+      final onSurfaceVariant = theme.colorScheme.onSurfaceVariant;
+      final isAi = article.aiGenerated;
+
+      String? thumb =
+          article.thumbnailUrl ?? (article.imageUrls.isNotEmpty ? article.imageUrls.first : null);
+      if (kIsWeb && (thumb ?? '').contains('b-cdn.net')) {
+        thumb = null;
+      }
+
+      final timestampLabel = _formatNewsTimestamp(article.createdAt);
+      final primaryTag = article.tags.isNotEmpty ? article.tags.first : null;
+
+      return Card(
+        margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        elevation: 2,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: () {
+            showModalBottomSheet(
+              context: context,
+              isScrollControlled: true,
+              backgroundColor: theme.colorScheme.surface,
+              builder: (ctx) {
+                return SafeArea(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: SingleChildScrollView(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            article.title,
+                            style: textTheme.titleLarge?.copyWith(
+                              fontWeight: FontWeight.bold,
+                              height: 1.2,
+                            ),
+                          ),
+                          if (article.subtitle != null &&
+                              article.subtitle!.isNotEmpty)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 4),
+                              child: Text(
+                                article.subtitle!,
+                                style: textTheme.titleSmall?.copyWith(
+                                  color: onSurfaceVariant,
+                                ),
+                              ),
+                            ),
+                          const SizedBox(height: 8),
+                          Row(
+                            children: [
+                              if (article.category != null &&
+                                  article.category!.isNotEmpty)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 4,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: theme.colorScheme.primary
+                                        .withOpacity(0.08),
+                                    borderRadius: BorderRadius.circular(999),
+                                  ),
+                                  child: Text(
+                                    article.category!,
+                                    style: textTheme.labelSmall?.copyWith(
+                                      color: theme.colorScheme.primary,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+                              if (article.category != null &&
+                                  article.category!.isNotEmpty)
+                                const SizedBox(width: 8),
+                              Text(
+                                '${article.language.toUpperCase()} • $timestampLabel',
+                                style: textTheme.labelSmall?.copyWith(
+                                  color: onSurfaceVariant,
+                                ),
+                              ),
+                              const Spacer(),
+                              if (isAi)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 4,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: theme.colorScheme.secondary
+                                        .withOpacity(0.1),
+                                    borderRadius: BorderRadius.circular(999),
+                                  ),
+                                  child: Text(
+                                    'AI',
+                                    style: textTheme.labelSmall?.copyWith(
+                                      color: theme.colorScheme.secondary,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          if (thumb != null && thumb.isNotEmpty)
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(12),
+                              child: AspectRatio(
+                                aspectRatio: 16 / 9,
+                                child: Image.network(
+                                  thumb,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (_, __, ___) =>
+                                      const SizedBox.shrink(),
+                                ),
+                              ),
+                            ),
+                          if (thumb != null && thumb.isNotEmpty)
+                            const SizedBox(height: 12),
+                          Text(
+                            article.content,
+                            style: textTheme.bodyMedium?.copyWith(
+                              height: 1.4,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                  )
-                : const SizedBox.shrink();
-          }
-          final post = newsPosts[index];
-          return _buildPostCard(post, _mediaByPostId[post.id]);
-        },
-      ),
-    );
-  }
-
-  bool _isNewsPost(Post post) {
-    final kind = post.kind?.toLowerCase();
-    if (kind == null) return false;
-    return kind.contains('news') || kind.contains('blog');
-  }
+                  ),
+                );
+              },
+            );
+          },
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          if (article.category != null &&
+                              article.category!.isNotEmpty)
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color: theme.colorScheme.primary
+                                    .withOpacity(0.08),
+                                borderRadius: BorderRadius.circular(999),
+                              ),
+                              child: Text(
+                                article.category!,
+                                style: textTheme.labelSmall?.copyWith(
+                                  color: theme.colorScheme.primary,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          const Spacer(),
+                          Text(
+                            '${article.language.toUpperCase()} • $timestampLabel',
+                            style: textTheme.labelSmall?.copyWith(
+                              color: onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        article.title,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w700,
+                          height: 1.2,
+                        ),
+                      ),
+                      if (article.summary != null &&
+                          article.summary!.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 4),
+                          child: Text(
+                            article.summary!,
+                            maxLines: 3,
+                            overflow: TextOverflow.ellipsis,
+                            style: textTheme.bodySmall?.copyWith(
+                              color: onSurfaceVariant,
+                              height: 1.3,
+                            ),
+                          ),
+                        ),
+                      const SizedBox(height: 6),
+                      Row(
+                        children: [
+                          if (primaryTag != null && primaryTag.isNotEmpty)
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color: theme.colorScheme.surfaceVariant,
+                                borderRadius: BorderRadius.circular(999),
+                              ),
+                              child: Text(
+                                '#$primaryTag',
+                                style: textTheme.labelSmall?.copyWith(
+                                  color: onSurfaceVariant,
+                                ),
+                              ),
+                            ),
+                          const Spacer(),
+                          if (isAi)
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color: theme.colorScheme.secondary
+                                    .withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(999),
+                              ),
+                              child: Text(
+                                'AI generated',
+                                style: textTheme.labelSmall?.copyWith(
+                                  color: theme.colorScheme.secondary,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                if (thumb != null && thumb.isNotEmpty) ...[
+                  const SizedBox(width: 12),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: AspectRatio(
+                      aspectRatio: 16 / 10,
+                      child: Image.network(
+                        thumb,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) =>
+                            const SizedBox(width: 0, height: 0),
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+      );
+    }
 
   Widget _buildPostCard(Post post, List<String>? media) {
     final isVideo = _isVideoPost(post);
