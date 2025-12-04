@@ -7,8 +7,8 @@ import 'appwrite_service.dart';
 
 /// Helper to call the Bunny upload Appwrite Function from the client.
 class BunnyUploadFunction {
-  /// Replace with your actual function ID from the Appwrite console.
-  static const String functionId = 'bunny-upload-function-id';
+  /// Appwrite Function ID for `bunny-upload`.
+  static const String functionId = '6931bd04af7106e4ce51';
 
   static Future<String?> uploadBytes(Uint8List bytes, String objectPath) async {
     final client = AppwriteService.account.client;
