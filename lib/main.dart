@@ -14,6 +14,7 @@ import 'screens/privacy_policy_screen.dart';
 import 'screens/new_chat_screen.dart';
 import 'screens/admin_dashboard_screen.dart';
 import 'screens/boost_center_screen.dart';
+import 'screens/main_screen.dart';
 import 'services/auth_wrapper.dart';
 import 'services/appwrite_service.dart';
 import 'services/storage_service.dart';
@@ -178,7 +179,8 @@ class XapZapApp extends StatelessWidget {
             themeMode: themeProvider.themeMode,
             home: const DecisionScreen(),
             routes: {
-              '/main': (context) => const AuthWrapper(),
+              '/main': (context) =>
+                  kIsWeb ? const MainScreen() : const AuthWrapper(),
               '/signin': (context) => const SignInScreen(),
               '/signup': (context) => const SignUpScreen(),
               '/privacy': (context) => const PrivacyPolicyScreen(),
@@ -228,6 +230,10 @@ class _DecisionScreenState extends State<DecisionScreen> {
 
     if (!_hasAcceptedPolicy) {
       return const PrivacyPolicyScreen();
+    }
+    // On web, let users browse as guests without forcing app-based auth.
+    if (kIsWeb) {
+      return const MainScreen();
     }
     return const AuthWrapper();
   }
