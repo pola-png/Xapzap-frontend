@@ -427,6 +427,20 @@ class AppwriteService {
     }
   }
 
+  static Future<models.RowList> searchProfiles(
+    String query, {
+    int limit = 20,
+  }) async {
+    return await _tables.listRows(
+      databaseId: databaseId,
+      tableId: profilesCollectionId,
+      queries: <String>[
+        Query.search('username', query),
+        Query.limit(limit),
+      ],
+    );
+  }
+
   static Future<models.RowList> searchPostsByHashtag(
     String tag, {
     int limit = 20,
@@ -438,6 +452,23 @@ class AppwriteService {
       tableId: postsCollectionId,
       queries: <String>[
         Query.search('content', query),
+        Query.orderDesc('createdAt'),
+        Query.limit(limit),
+        if (cursorId != null) Query.cursorAfter(cursorId),
+      ],
+    );
+  }
+
+  static Future<models.RowList> searchPostsByText(
+    String text, {
+    int limit = 20,
+    String? cursorId,
+  }) async {
+    return await _tables.listRows(
+      databaseId: databaseId,
+      tableId: postsCollectionId,
+      queries: <String>[
+        Query.search('content', text),
         Query.orderDesc('createdAt'),
         Query.limit(limit),
         if (cursorId != null) Query.cursorAfter(cursorId),

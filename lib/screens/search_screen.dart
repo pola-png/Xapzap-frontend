@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:appwrite/models.dart' as aw;
+
+import '../services/appwrite_service.dart';
 import 'hashtag_feed_screen.dart';
 
 class SearchScreen extends StatefulWidget {
@@ -11,20 +14,16 @@ class SearchScreen extends StatefulWidget {
 class _SearchScreenState extends State<SearchScreen> {
   final TextEditingController _searchController = TextEditingController();
   List<Map<String, dynamic>> _searchResults = [];
+  bool _isLoading = false;
+  String? _error;
 
-  final List<Map<String, dynamic>> _users = [
-    {'name': 'John Doe', 'handle': '@john', 'avatar': ''},
-    {'name': 'Jane Smith', 'handle': '@jane', 'avatar': ''},
-  ];
-
-  final List<Map<String, dynamic>> _posts = [
-    {'author': 'John Doe', 'content': 'Just setting up my XapZap!'},
-    {'author': 'Jane Smith', 'content': 'Loving this new app!'},
-  ];
-
-  void _performSearch(String query) {
+  Future<void> _performSearch(String query) async {
     if (query.isEmpty) {
-      setState(() => _searchResults = []);
+      setState(() {
+        _searchResults = [];
+        _error = null;
+        _isLoading = false;
+      });
       return;
     }
 
@@ -39,20 +38,60 @@ class _SearchScreenState extends State<SearchScreen> {
       return;
     }
 
-    final lowerCaseQuery = query.toLowerCase();
-    final userResults = _users
-        .where((user) =>
-            user['name']!.toLowerCase().contains(lowerCaseQuery) ||
-            user['handle']!.toLowerCase().contains(lowerCaseQuery))
-        .map((user) => {'type': 'user', ...user});
-
-    final postResults = _posts
-        .where((post) => post['content']!.toLowerCase().contains(lowerCaseQuery))
-        .map((post) => {'type': 'post', ...post});
-
     setState(() {
-      _searchResults = [...userResults, ...postResults];
+      _isLoading = true;
+      _error = null;
     });
+
+    try {
+      final List<Map<String, dynamic>> results = [];
+
+      // User search: by username (handle), stripping leading '@' if present.
+      final raw = query.trim();
+      final handle = raw.startsWith('@') ? raw.substring(1) : raw;
+      if (handle.isNotEmpty) {
+        final aw.RowList profiles =
+            await AppwriteService.searchProfiles(handle, limit: 20);
+        for (final p in profiles.rows) {
+          final data = p.data;
+          final username = (data['username'] as String?) ?? '';
+          final displayName =
+              (data['displayName'] as String?) ?? (username.isNotEmpty ? username : 'User');
+          final avatar = (data['avatarUrl'] as String?) ?? '';
+
+          results.add({
+            'type': 'user',
+            'id': p.$id,
+            'name': displayName,
+            'handle': username.isNotEmpty ? '@$username' : '',
+            'avatar': avatar,
+          });
+        }
+      }
+
+      // Post search: search text in post content.
+      final aw.RowList posts =
+          await AppwriteService.searchPostsByText(query, limit: 40);
+      for (final row in posts.rows) {
+        final data = row.data;
+        results.add({
+          'type': 'post',
+          'id': row.$id,
+          'author': (data['username'] as String?) ?? 'Unknown',
+          'content': (data['content'] as String?) ?? '',
+        });
+      }
+
+      setState(() {
+        _searchResults = results;
+        _isLoading = false;
+      });
+    } catch (_) {
+      setState(() {
+        _isLoading = false;
+        _error = 'Failed to search. Please try again.';
+      });
+    }
   }
 
   @override
@@ -73,21 +112,25 @@ class _SearchScreenState extends State<SearchScreen> {
           ? const Center(
               child: Text('Search for users and posts.'),
             )
-          : _searchResults.isEmpty
-              ? const Center(
-                  child: Text('No results found.'),
-                )
-              : ListView.builder(
-                  itemCount: _searchResults.length,
-                  itemBuilder: (context, index) {
-                    final result = _searchResults[index];
-                    if (result['type'] == 'user') {
-                      return _buildUserResult(result);
-                    } else {
-                      return _buildPostResult(result);
-                    }
-                  },
-                ),
+          : _isLoading
+              ? const Center(child: CircularProgressIndicator())
+              : _error != null
+                  ? Center(child: Text(_error!))
+                  : _searchResults.isEmpty
+                      ? const Center(
+                          child: Text('No results found.'),
+                        )
+                      : ListView.builder(
+                          itemCount: _searchResults.length,
+                          itemBuilder: (context, index) {
+                            final result = _searchResults[index];
+                            if (result['type'] == 'user') {
+                              return _buildUserResult(result);
+                            } else {
+                              return _buildPostResult(result);
+                            }
+                          },
+                        ),
     );
   }
 
