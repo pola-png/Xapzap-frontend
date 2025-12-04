@@ -20,6 +20,17 @@ class WasabiService {
   static bool _initialized = false;
 
   static Future<void> initialize() async {
+    if (kIsWeb) {
+      // On web we only ever read from the CDN; uploads go through
+      // the Appwrite function, so we don't need the secret key here.
+      _storageZone = 'xapzap';
+      _storageHost = 'storage.bunnycdn.com';
+      _cdnBaseUrl = 'https://xapzapolami.b-cdn.net';
+      _storageKey = null;
+      _initialized = true;
+      return;
+    }
+
     _storageZone = dotenv.env['BUNNY_STORAGE_ZONE'];
     _storageKey = dotenv.env['BUNNY_STORAGE_KEY'];
     _storageHost = dotenv.env['BUNNY_STORAGE_HOST'] ?? 'storage.bunnycdn.com';
