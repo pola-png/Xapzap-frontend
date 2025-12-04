@@ -296,17 +296,47 @@ class _HomeScreenState extends State<HomeScreen>
       body: Row(
         children: [
           SizedBox(
-            width: 260,
+            width: isWatchTab ? 72 : 260,
             child: ListView(
               padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 0),
               children: [
                 const SizedBox(height: 4),
-                _buildSideNavItem(Icons.home_filled, 'For You', 0),
-                _buildSideNavItem(Icons.ondemand_video_outlined, 'Watch', 1),
-                _buildSideNavItem(Icons.video_library_outlined, 'Reels', 2),
-                _buildSideNavItem(Icons.wifi_tethering, 'Live', 3),
-                _buildSideNavItem(Icons.article_outlined, 'News', 4),
-                _buildSideNavItem(Icons.groups_outlined, 'Following', 5),
+                _buildSideNavItem(
+                  Icons.home_filled,
+                  'For You',
+                  0,
+                  compact: isWatchTab,
+                ),
+                _buildSideNavItem(
+                  Icons.ondemand_video_outlined,
+                  'Watch',
+                  1,
+                  compact: isWatchTab,
+                ),
+                _buildSideNavItem(
+                  Icons.video_library_outlined,
+                  'Reels',
+                  2,
+                  compact: isWatchTab,
+                ),
+                _buildSideNavItem(
+                  Icons.wifi_tethering,
+                  'Live',
+                  3,
+                  compact: isWatchTab,
+                ),
+                _buildSideNavItem(
+                  Icons.article_outlined,
+                  'News',
+                  4,
+                  compact: isWatchTab,
+                ),
+                _buildSideNavItem(
+                  Icons.groups_outlined,
+                  'Following',
+                  5,
+                  compact: isWatchTab,
+                ),
               ],
             ),
           ),
@@ -315,8 +345,9 @@ class _HomeScreenState extends State<HomeScreen>
               alignment: Alignment.topCenter,
               child: ConstrainedBox(
                 constraints: BoxConstraints(
-                  // On Watch tab, keep feed narrower for large screens.
-                  maxWidth: isWatchTab ? 1200 : double.infinity,
+                  // On Watch tab, keep feed fairly wide; for other tabs
+                  // (For You, Reels, etc.) cap width so content stays tight.
+                  maxWidth: isWatchTab ? 1200 : 960,
                 ),
                 child: TabBarView(
                   controller: _tabController,
@@ -337,8 +368,28 @@ class _HomeScreenState extends State<HomeScreen>
     String label,
     int tabIndex, {
     VoidCallback? onTap,
+    bool compact = false,
   }) {
     final isSelected = tabIndex >= 0 && _tabController.index == tabIndex;
+    if (compact) {
+      return IconButton(
+        tooltip: label,
+        icon: Icon(
+          icon,
+          color: isSelected ? const Color(0xFF1DA1F2) : null,
+        ),
+        onPressed: () {
+          if (onTap != null) {
+            onTap();
+            return;
+          }
+          if (tabIndex >= 0) {
+            _handleTabTap(tabIndex);
+            setState(() => _tabController.index = tabIndex);
+          }
+        },
+      );
+    }
     return ListTile(
       contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
       leading: Icon(icon, color: isSelected ? const Color(0xFF1DA1F2) : null),

@@ -927,7 +927,7 @@ class _PostCardState extends State<PostCard> {
       return 9 / 8; // slightly shorter portrait reels in feed
     }
     if (isVideoPost) {
-      return 16 / 7; // standard landscape video look
+      return 16 / 8; // standard landscape video look
     }
     return 4 /
         5; // photo/news default: taller than square so reactions stay visible
