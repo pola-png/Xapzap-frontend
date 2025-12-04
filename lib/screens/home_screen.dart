@@ -201,9 +201,9 @@ class _HomeScreenState extends State<HomeScreen>
         final onSurface = theme.colorScheme.onSurface;
         final onSurfaceVariant = theme.colorScheme.onSurfaceVariant;
 
-        // On web we always show the desktop-style header (tab bar in the app bar)
-        // so bottom navigation never appears on desktop browsers.
-        if (kIsWeb || constraints.maxWidth > 1100) {
+        // Treat as desktop layout only on wide screens; narrow web should use
+        // the same mobile layout as the native app.
+        if (constraints.maxWidth > 1100) {
           return _buildDesktopScaffold(theme, onSurface, onSurfaceVariant);
         }
         return _buildMobileScaffold(theme, onSurface, onSurfaceVariant);
@@ -727,7 +727,7 @@ class _HomeScreenState extends State<HomeScreen>
   Widget _buildVideoList(List<Post> posts) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final isDesktopGrid = kIsWeb || constraints.maxWidth > 1100;
+        final isDesktopGrid = constraints.maxWidth > 1100;
         if (!isDesktopGrid) {
           return ListView.builder(
             controller: _watchController,
