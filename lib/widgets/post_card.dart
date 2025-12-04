@@ -924,12 +924,12 @@ class _PostCardState extends State<PostCard> {
 
   double _pickAspectRatio(String kindLower, bool isVideoPost) {
     if (isVideoPost && kindLower.contains('reel')) {
-      return 5 / 6; // slightly shorter portrait reels in feed
+      return 13 / 6; // slightly shorter portrait reels in feed
     }
     if (isVideoPost) {
       return 16 / 8; // standard landscape video look
     }
-    return 4 /
+    return 10 /
         5; // photo/news default: taller than square so reactions stay visible
   }
 
