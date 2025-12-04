@@ -769,7 +769,7 @@ class _PostCardState extends State<PostCard> {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
       child: AspectRatio(
-        aspectRatio: 1 / 0.70, // shorter rectangle
+        aspectRatio: 1 / 0.55, // shorter rectangle than before
         child: Container(
           width: double.infinity,
           decoration: BoxDecoration(
@@ -924,7 +924,7 @@ class _PostCardState extends State<PostCard> {
 
   double _pickAspectRatio(String kindLower, bool isVideoPost) {
     if (isVideoPost && kindLower.contains('reel')) {
-      return 9 / 16; // portrait friendly reels
+      return 9 / 11; // slightly shorter portrait reels in feed
     }
     if (isVideoPost) {
       return 16 / 9; // standard landscape video look

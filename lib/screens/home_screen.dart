@@ -296,7 +296,7 @@ class _HomeScreenState extends State<HomeScreen>
       body: Row(
         children: [
           SizedBox(
-            width: 220,
+            width: 260,
             child: ListView(
               padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 0),
               children: [
@@ -326,7 +326,7 @@ class _HomeScreenState extends State<HomeScreen>
             ),
           ),
           if (!isWatchTab)
-            SizedBox(width: 220, child: _buildRightSidebar(theme)),
+            SizedBox(width: 260, child: _buildRightSidebar(theme)),
         ],
       ),
     );
@@ -358,78 +358,9 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   Widget _buildRightSidebar(ThemeData theme) {
-    final textColor = theme.colorScheme.onSurface;
-    return SingleChildScrollView(
-      padding: EdgeInsets.zero,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(8, 12, 8, 16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Trending',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w800,
-                color: textColor,
-              ),
-            ),
-            const SizedBox(height: 8),
-            ...['#xapzap', '#news', '#reels', '#tech', '#music'].map(
-              (t) => Padding(
-                padding: const EdgeInsets.symmetric(vertical: 6),
-                child: Text(
-                  t,
-                  style: TextStyle(fontSize: 14, color: textColor),
-                ),
-              ),
-            ),
-            const SizedBox(height: 20),
-            Text(
-              'Notifications',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w800,
-                color: textColor,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.surfaceVariant.withOpacity(0.4),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Text(
-                'You\'re all caught up.',
-                style: TextStyle(color: theme.colorScheme.onSurfaceVariant),
-              ),
-            ),
-            const SizedBox(height: 24),
-            Text(
-              'Chats',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w800,
-                color: textColor,
-              ),
-            ),
-            const SizedBox(height: 8),
-            ListTile(
-              dense: true,
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.chat_bubble_outline, size: 20),
-              title: const Text('Open chats'),
-              onTap: () {
-                Navigator.of(
-                  context,
-                ).push(MaterialPageRoute(builder: (_) => const ChatScreen()));
-              },
-            ),
-          ],
-        ),
-      ),
-    );
+    // Right sidebar previously showed static mock data (trending tags,
+    // notifications, chats). Hide it until backed by real data.
+    return const SizedBox.shrink();
   }
 
   List<Widget> _buildTabViews() {
