@@ -4,7 +4,7 @@ publish_to: 'none'
 version: 0.1.0
 
 environment:
-  sdk: ^3.9.2
+  sdk: '>=3.5.0 <4.0.0'
 
 dependencies:
   flutter:
@@ -66,4 +66,3 @@ flutter_native_splash:
   android_12:
     image: assets/icons/xapzap_splash_icon.png
     icon_background_color: "#000000"
-
