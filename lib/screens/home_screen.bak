@@ -1,0 +1,243 @@
+import 'package:flutter/material.dart';
+import 'package:appwrite/models.dart' as aw;
+import '../models/post.dart';
+import '../services/appwrite_service.dart';
+import '../widgets/post_card.dart';
+import '../widgets/guest_prompt.dart';
+import '../models/story.dart';
+import '../widgets/story_avatar.dart';
+import 'search_screen.dart';
+
+class HomeScreen extends StatefulWidget {
+  const HomeScreen({super.key});
+
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateMixin {
+  final List<Post> _forYouPosts = [];
+  final List<Post> _followingPosts = [];
+  final Map<String, List<String>> _mediaByPostId = {};
+  final Map<String, String> _authorByPostId = {};
+  final List<Story> _stories = [];
+  final ScrollController _forYouController = ScrollController();
+  final ScrollController _followingController = ScrollController();
+  late TabController _tabController;
+  bool _isLoading = false;
+  bool _isGuest = true;
+  String? _forYouCursor;
+  String? _followingCursor;
+  List<String> _followingIds = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _checkUser();
+    _tabController = TabController(length: 2, vsync: this);
+    _loadStories();
+    _forYouController.addListener(() => _onScroll(_forYouController, true));
+    _followingController.addListener(() => _onScroll(_followingController, false));
+    _refreshFeed(true);
+    _refreshFeed(false);
+  }
+
+  Future<void> _checkUser() async {
+    final user = await AppwriteService.getCurrentUser();
+    setState(() => _isGuest = user == null);
+    if (user != null) {
+      _followingIds = await AppwriteService.getFollowingUserIds(user.$id);
+      // listen for follow/unfollow changes
+      AppwriteService.followingVersion.addListener(() async {
+        final me = await AppwriteService.getCurrentUser();
+        if (me != null && mounted) {
+          _followingIds = await AppwriteService.getFollowingUserIds(me.$id);
+          await _refreshFeed(false);
+        }
+      });
+    }
+  }
+
+  void _loadStories() {
+    _stories.clear();
+    _stories.addAll([
+      Story(id: 'me', username: 'You', imageUrl: 'https://via.placeholder.com/80'),
+    ]);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.white,
+      body: NestedScrollView(
+        headerSliverBuilder: (context, innerBoxIsScrolled) => [
+          SliverAppBar(
+            backgroundColor: Colors.white,
+            floating: true,
+            pinned: true,
+            title: const Text('XapZap', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Color(0xFF1DA1F2))),
+            actions: [
+              IconButton(
+                icon: const Icon(Icons.search, color: Colors.black, size: 28),
+                onPressed: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(builder: (context) => const SearchScreen()),
+                  );
+                },
+              ),
+            ],
+            bottom: TabBar(
+              controller: _tabController,
+              labelColor: Colors.black,
+              unselectedLabelColor: const Color(0xFF6B7280),
+              indicatorColor: Colors.black,
+              tabs: const [Tab(text: 'For You'), Tab(text: 'Following')],
+            ),
+          )
+        ],
+        body: TabBarView(
+          controller: _tabController,
+          children: [
+            _buildFeed(_forYouPosts, _forYouController, true),
+            _buildFeed(_followingPosts, _followingController, false),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFeed(List<Post> posts, ScrollController controller, bool isForYou) {
+    return RefreshIndicator(
+      onRefresh: () => _refreshFeed(isForYou),
+      child: CustomScrollView(
+        controller: controller,
+        slivers: [
+          if (isForYou)
+            SliverToBoxAdapter(
+              child: SizedBox(
+                height: 110,
+                child: ListView.builder(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: _stories.length,
+                  itemBuilder: (context, index) => StoryAvatar(story: _stories[index], isCurrentUser: index == 0),
+                ),
+              ),
+            ),
+          SliverList(
+            delegate: SliverChildBuilderDelegate(
+              (context, index) {
+                if (index >= posts.length) {
+                  return _isLoading
+                      ? const Center(child: Padding(padding: EdgeInsets.all(16), child: CircularProgressIndicator(color: Color(0xFF1DA1F2))))
+                      : const SizedBox.shrink();
+                }
+                final post = posts[index];
+                return PostCard(
+                  post: post,
+                  isGuest: _isGuest,
+                  onGuestAction: _showGuestPrompt,
+                  mediaUrls: _mediaByPostId[post.id],
+                  authorId: _authorByPostId[post.id],
+                );
+              },
+              childCount: posts.length + (_isLoading ? 1 : 0),
+            ),
+          )
+        ],
+      ),
+    );
+  }
+
+  void _onScroll(ScrollController controller, bool isForYou) {
+    if (controller.position.pixels >= controller.position.maxScrollExtent - 200 && !_isLoading) {
+      _loadMore(isForYou);
+    }
+  }
+
+  Future<void> _refreshFeed(bool isForYou) async {
+    setState(() {
+      if (isForYou) {
+        _forYouPosts.clear();
+        _forYouCursor = null;
+      } else {
+        _followingPosts.clear();
+        _followingCursor = null;
+      }
+    });
+    await _loadMore(isForYou);
+  }
+
+  Future<void> _loadMore(bool isForYou) async {
+    if (_isLoading) return;
+    setState(() => _isLoading = true);
+    try {
+      List<aw.Document> docs = [];
+      if (isForYou) {
+        docs = await AppwriteService.fetchPosts(limit: 10, cursorId: _forYouCursor);
+      } else {
+        docs = await AppwriteService.fetchPostsByUserIds(_followingIds, limit: 10, cursorId: _followingCursor);
+      }
+      final mapped = <Post>[];
+      for (final d in docs) {
+        final data = d.data;
+        final List<String> mediaUrls = data['mediaUrls'] is List
+            ? (data['mediaUrls'] as List).map((item) => item.toString()).toList()
+            : [];
+        _mediaByPostId[d.$id] = mediaUrls;
+        _authorByPostId[d.$id] = data['userId'] as String? ?? '';
+        final kind = (data['postType'] ?? data['type'] ?? data['category']) as String?;
+        final title = data['title'] as String?;
+        final thumbnailUrl = data['thumbnailUrl'] as String?;
+        final firstImage = thumbnailUrl?.isNotEmpty == true
+            ? thumbnailUrl
+            : (mediaUrls.isNotEmpty ? mediaUrls.first : null);
+        mapped.add(
+          Post(
+            id: d.$id,
+            username: data['username'] as String? ?? 'No Name',
+            userAvatar: data['userAvatar'] as String? ?? '',
+            content: data['content'] as String? ?? '',
+            timestamp: data['createdAt'] != null
+                ? DateTime.tryParse(data['createdAt'] as String? ?? '') ?? DateTime.now()
+                : DateTime.now(),
+            likes: data['likes'] as int? ?? 0,
+            comments: data['comments'] as int? ?? 0,
+            reposts: data['reposts'] as int? ?? 0,
+            impressions: data['impressions'] as int? ?? 0,
+            views: data['views'] as int? ?? 0,
+            imageUrl: firstImage,
+            videoUrl: null,
+            kind: kind,
+            title: title,
+            thumbnailUrl: thumbnailUrl,
+          ),
+        );
+      }
+      setState(() {
+        final list = isForYou ? _forYouPosts : _followingPosts;
+        list.addAll(mapped);
+        if (docs.isNotEmpty) {
+          if (isForYou) {
+            _forYouCursor = docs.last.$id;
+          } else {
+            _followingCursor = docs.last.$id;
+          }
+        }
+      });
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  void _showGuestPrompt() {
+    showDialog(context: context, builder: (_) => const GuestPrompt());
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    _forYouController.dispose();
+    _followingController.dispose();
+    super.dispose();
+  }
+}

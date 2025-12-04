@@ -1,0 +1,24 @@
+List of main screens/pages in this app (Flutter):
+
+- main_screen.dart (tab shell)
+- home_screen.dart
+- hashtag_feed_screen.dart
+- post_detail_screen.dart
+- edit_post_screen.dart
+- upload_screen.dart
+- pending_uploads_screen.dart (banner used in feeds)
+- comment_screen.dart
+- story_publish_screen.dart
+- status_viewer_screen.dart
+- chat_screen.dart
+- individual_chat_screen.dart
+- new_chat_screen.dart
+- notifications_screen.dart (updates + notifications tabs)
+- profile_screen.dart
+- search_screen.dart
+- video_detail_screen.dart
+- privacy_policy_screen.dart
+- auth/sign_in_screen.dart
+- auth/sign_up_screen.dart
+- settings/settings_screen.dart
+- settings/notifications_settings_screen.dart
