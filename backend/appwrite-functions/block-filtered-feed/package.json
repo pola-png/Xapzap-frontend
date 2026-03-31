@@ -1,0 +1,11 @@
+{
+  "name": "xapzap-block-filtered-feed",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "src/main.js",
+  "dependencies": {
+    "googleapis": "^133.0.0",
+    "node-appwrite": "^20.3.0"
+  }
+}
